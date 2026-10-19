@@ -30,6 +30,7 @@ LEVELS = [
     {"name": "Màn 5 · Sakura", "clues": 20},
 ]
 
+# Bảng đáp án Sudoku
 SOLUTION = [
     [5, 3, 4, 6, 7, 8, 9, 1, 2],
     [6, 7, 2, 1, 9, 5, 3, 4, 8],
@@ -43,7 +44,7 @@ SOLUTION = [
 ]
 
 # =========================================================
-# TRẠNG THÁI ỨNG DỤNG
+# TRẠNG THÁI TRÒ CHƠI
 # =========================================================
 
 DEFAULTS = {
@@ -57,6 +58,7 @@ DEFAULTS = {
     "sound_event": None,
     "music_on": True,
     "celebrated": False,
+    "win_sound_played": False,
 }
 
 for key, value in DEFAULTS.items():
@@ -65,7 +67,7 @@ for key, value in DEFAULTS.items():
 
 
 # =========================================================
-# ĐỌC ASSETS
+# TỆP TÀI NGUYÊN
 # =========================================================
 
 def read_asset(filename):
@@ -135,7 +137,7 @@ def show_background(filename):
 
 
 # =========================================================
-# ĐIỀU HƯỚNG VÀ TẠO SUDOKU
+# ĐIỀU HƯỚNG
 # =========================================================
 
 def go(page):
@@ -144,7 +146,16 @@ def go(page):
     st.rerun()
 
 
+def clear_cell_widgets():
+    for r in range(9):
+        for c in range(9):
+            key = f"cell_{r}_{c}"
+            if key in st.session_state:
+                del st.session_state[key]
+
+
 def make_puzzle(level):
+    # Tạo bảng theo độ khó bằng cách ẩn số từ đáp án.
     puzzle = [row[:] for row in SOLUTION]
 
     positions = [
@@ -164,24 +175,28 @@ def make_puzzle(level):
 
 
 def start_level(level):
-    for r in range(9):
-        for c in range(9):
-            key = f"cell_{r}_{c}"
-            if key in st.session_state:
-                del st.session_state[key]
+    clear_cell_widgets()
+
+    puzzle = make_puzzle(level)
 
     st.session_state.level = level
-    st.session_state.puzzle = make_puzzle(level)
-    st.session_state.board = [
-        row[:] for row in st.session_state.puzzle
-    ]
+    st.session_state.puzzle = puzzle
+    st.session_state.board = [row[:] for row in puzzle]
     st.session_state.status = "playing"
     st.session_state.page = "game"
     st.session_state.sound_event = "click"
     st.session_state.celebrated = False
+    st.session_state.win_sound_played = False
 
+    st.rerun()
+
+
+# =========================================================
+# KIỂM TRA SUDOKU
+# =========================================================
 
 def has_conflict(board, r, c, value):
+    # Kiểm tra hàng và cột.
     for i in range(9):
         if i != c and board[r][i] == value:
             return True
@@ -189,6 +204,7 @@ def has_conflict(board, r, c, value):
         if i != r and board[i][c] == value:
             return True
 
+    # Kiểm tra khối 3x3.
     start_r = (r // 3) * 3
     start_c = (c // 3) * 3
 
@@ -206,6 +222,39 @@ def board_complete(board):
         for r in range(9)
         for c in range(9)
     )
+
+
+def board_is_correct(board):
+    return board == SOLUTION
+
+
+def finish_level():
+    """Đánh dấu hoàn thành và mở khóa màn kế tiếp."""
+    current_level = st.session_state.level
+
+    st.session_state.status = "won"
+
+    if current_level not in st.session_state.completed:
+        st.session_state.completed.append(current_level)
+
+    # Màn 1 mở màn 2; màn 2 mở màn 3;
+    # màn 3 mở màn 4; màn 4 mở màn 5.
+    # Màn 5 là màn cuối cùng hiện có.
+    next_unlocked = min(
+        current_level + 1,
+        len(LEVELS) - 1,
+    )
+
+    st.session_state.unlocked = max(
+        st.session_state.unlocked,
+        next_unlocked,
+    )
+
+    st.session_state.celebrated = False
+
+    if not st.session_state.win_sound_played:
+        st.session_state.sound_event = "win"
+        st.session_state.win_sound_played = True
 
 
 # =========================================================
@@ -241,7 +290,6 @@ st.markdown(
         padding-bottom: 7rem;
     }}
 
-    /* TIÊU ĐỀ TRANG CHỦ */
     .sudoku-logo {{
         width: 100%;
         text-align: center;
@@ -297,7 +345,7 @@ st.markdown(
         margin-bottom: 1.5rem;
     }}
 
-    /* HOA BẤM ĐỂ VÀO CHỌN MÀN */
+    /* Bông hoa bấm để vào chọn màn */
     .st-key-flower_start {{
         width: 100% !important;
         max-width: 100% !important;
@@ -372,7 +420,7 @@ st.markdown(
         transform: scale(1.05) !important;
     }}
 
-    /* NÚT THÔNG THƯỜNG */
+    /* Nút bấm thông thường */
     div.stButton > button {{
         background: {WINE};
         color: white !important;
@@ -391,7 +439,7 @@ st.markdown(
         transform: translateY(-2px);
     }}
 
-    /* NÚT ĐÃ KHÓA: CHỮ MÀU HỒNG RƯỢU VANG */
+    /* Chữ Đã khóa màu hồng rượu */
     div.stButton > button:disabled,
     div.stButton > button:disabled p,
     div.stButton > button:disabled span,
@@ -411,7 +459,6 @@ st.markdown(
         margin-bottom: .5rem;
     }}
 
-    /* KHOẢNG CÁCH CÁC Ô SUDOKU */
     [data-testid="stVerticalBlock"] {{
         gap: 0.75rem !important;
     }}
@@ -423,10 +470,7 @@ st.markdown(
         min-width: 0 !important;
     }}
 
-    [data-testid="stSelectbox"] > div {{
-        width: 100% !important;
-    }}
-
+    [data-testid="stSelectbox"] > div,
     [data-testid="stSelectbox"] [data-baseweb="select"] {{
         width: 100% !important;
     }}
@@ -447,7 +491,6 @@ st.markdown(
         display: none !important;
     }}
 
-    /* VIỀN RIÊNG CHO TỪNG KHỐI 3×3 */
     [data-testid="stVerticalBlockBorderWrapper"] {{
         border: 1px solid rgba(120, 22, 56, .22) !important;
         border-radius: 12px !important;
@@ -456,7 +499,6 @@ st.markdown(
         overflow: visible !important;
     }}
 
-    /* Ô CHỨA SỐ CỐ ĐỊNH CHIỀU CAO */
     .sudoku-fixed-cell {{
         min-height: 3rem;
         height: 3rem;
@@ -480,11 +522,34 @@ st.markdown(
         font-size: 1.3rem;
         border: 2px solid #e5a9bb;
         border-radius: 18px;
-        background: rgba(255, 241, 246, .92);
+        background: rgba(255, 241, 246, .94);
         margin: 1rem 0;
     }}
 
-    /* CÁNH HOA RƠI */
+    .win-title {{
+        text-align: center;
+        color: {WINE};
+        font-size: clamp(1.8rem, 4vw, 3rem);
+        line-height: 1.5;
+        padding: 1.2rem .5rem;
+        text-shadow: 0 3px 12px rgba(198, 93, 123, .24);
+        animation: winGlow 1.8s ease-in-out infinite;
+    }}
+
+    .win-flowers {{
+        text-align: center;
+        color: {ROSE};
+        font-size: clamp(2rem, 5vw, 4rem);
+        letter-spacing: .3rem;
+        padding: .5rem;
+    }}
+
+    @keyframes winGlow {{
+        0%, 100% {{ transform: scale(1); }}
+        50% {{ transform: scale(1.025); }}
+    }}
+
+    /* Cánh hoa rơi */
     .petal {{
         position: fixed;
         top: -100px;
@@ -507,7 +572,7 @@ st.markdown(
         }}
     }}
 
-    /* NÚT NHẠC */
+    /* Nút nhạc ở góc dưới trái */
     .st-key-toggle_music {{
         position: fixed !important;
         left: 8px !important;
@@ -566,7 +631,7 @@ st.markdown(
 
 
 # =========================================================
-# CÁNH HOA ANH ĐÀO RƠI
+# CÁNH HOA ANH ĐÀO BAY
 # =========================================================
 
 random.seed(23)
@@ -634,6 +699,11 @@ if st.session_state.page == "menu":
         st.session_state.music_on = not st.session_state.music_on
         st.rerun()
 
+
+# =========================================================
+# ÂM THANH HIỆU ỨNG
+# =========================================================
+
 if st.session_state.sound_event:
     sound_map = {
         "click": "sounds_click.mp3",
@@ -668,7 +738,6 @@ if st.session_state.page == "menu":
         unsafe_allow_html=True,
     )
 
-    # HOA ANH ĐÀO BẤM ĐỂ VÀO CHỌN MÀN
     with st.container(key="flower_start"):
         if st.button("🌸", key="flower_button"):
             go("levels")
@@ -680,7 +749,7 @@ if st.session_state.page == "menu":
 
 
 # =========================================================
-# CHỌN MÀN CHƠI
+# CHỌN MÀN
 # =========================================================
 
 elif st.session_state.page == "levels":
@@ -731,7 +800,6 @@ elif st.session_state.page == "levels":
                     use_container_width=True,
                 ):
                     start_level(i)
-                    st.rerun()
             else:
                 st.button(
                     "Đã khóa",
@@ -766,52 +834,132 @@ elif st.session_state.page == "game":
         unsafe_allow_html=True,
     )
 
-    if st.session_state.status == "lost":
-        st.markdown(
-            '<div class="status-box">'
-            'Bạn đã sai rồi, không có cơ hội chơi lại đâu nha'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+    # -----------------------------------------------------
+    # MÀN THẮNG
+    # -----------------------------------------------------
 
-        if st.button("← Chọn màn khác", key="lost_levels"):
-            go("levels")
-
-        if st.button("⌂ Về trang chủ", key="lost_home"):
-            go("menu")
-
-    elif st.session_state.status == "won":
+    if st.session_state.status == "won":
         if not st.session_state.celebrated:
             st.balloons()
             st.session_state.celebrated = True
 
-        st.markdown(
-            '<div class="status-box">'
-            '🌸 Chúc mừng! Bạn đã hoàn thành màn chơi! 🌸'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
+        # Hoàn thành màn 1–4
         if level_index < len(LEVELS) - 1:
+            st.markdown(
+                """
+                <div class="win-flowers">
+                    🌸 🌷 🌸 🌷 🌸
+                </div>
+                <div class="win-title">
+                    ✨ Chúc mừng bạn đã thắng! ✨
+                </div>
+                <div class="status-box">
+                    Bạn đã hoàn thành xuất sắc màn chơi này!
+                    <br>
+                    Những cánh hoa Sakura đang chúc mừng bạn 🌸
+                </div>
+                <div class="win-flowers">
+                    🌸 💮 🌸 💮 🌸
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            next_level = level_index + 1
+
+            st.success(
+                f"🌸 Bạn đã mở khóa {LEVELS[next_level]['name']}!"
+            )
+
             if st.button(
-                "Chơi màn tiếp theo →",
+                "🌸 Chơi màn tiếp theo",
                 key="next_level",
                 use_container_width=True,
             ):
-                start_level(level_index + 1)
-                st.rerun()
+                start_level(next_level)
 
-        if st.button("← Chọn màn khác", key="won_levels"):
+        # HOÀN THÀNH MÀN 5
+        else:
+            st.markdown(
+                """
+                <div class="win-flowers">
+                    🌸 🌷 💮 🌷 🌸
+                </div>
+
+                <div class="win-title">
+                    🎉 Chúc mừng bạn đã hoàn thành trò chơi của mình! 🎉
+                </div>
+
+                <div class="status-box">
+                    <p>
+                        Bạn đã vượt qua tất cả 5 màn Sudoku Sakura!
+                    </p>
+                    <p>
+                        🌸 Nhà sản xuất đang phát triển màn mới,
+                        vui lòng chờ nhé! 🌸
+                    </p>
+                    <div class="win-flowers">
+                        🌸 💮 🌸 💮 🌸
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.write("")
+
+        if st.button(
+            "← Chọn màn chơi",
+            key="won_levels",
+            use_container_width=True,
+        ):
             go("levels")
 
-        if st.button("⌂ Về trang chủ", key="won_home"):
+        if st.button(
+            "⌂ Về trang chủ",
+            key="won_home",
+            use_container_width=True,
+        ):
             go("menu")
+
+    # -----------------------------------------------------
+    # MÀN THUA
+    # -----------------------------------------------------
+
+    elif st.session_state.status == "lost":
+        st.markdown(
+            """
+            <div class="status-box">
+                🌸 Bạn đã sai rồi, không có cơ hội chơi lại đâu nha.
+                <br>
+                Đừng buồn nhé, hãy chọn màn khác để tiếp tục!
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if st.button(
+            "← Chọn màn khác",
+            key="lost_levels",
+            use_container_width=True,
+        ):
+            go("levels")
+
+        if st.button(
+            "⌂ Về trang chủ",
+            key="lost_home",
+            use_container_width=True,
+        ):
+            go("menu")
+
+    # -----------------------------------------------------
+    # ĐANG CHƠI
+    # -----------------------------------------------------
 
     else:
         board = st.session_state.board
         puzzle = st.session_state.puzzle
 
-        # BẢNG 9 KHỐI, MỖI KHỐI 3×3
         for block_row in range(3):
             block_columns = st.columns(3, gap="medium")
 
@@ -829,10 +977,7 @@ elif st.session_state.page == "game":
                     with st.container(border=True):
                         for local_r in range(3):
                             r = block_row * 3 + local_r
-                            cell_columns = st.columns(
-                                3,
-                                gap="small",
-                            )
+                            cell_columns = st.columns(3, gap="small")
 
                             for local_c in range(3):
                                 c = block_col * 3 + local_c
@@ -847,6 +992,7 @@ elif st.session_state.page == "game":
                                             """,
                                             unsafe_allow_html=True,
                                         )
+
                                     else:
                                         key = f"cell_{r}_{c}"
                                         options = ["—"] + [
@@ -854,9 +1000,10 @@ elif st.session_state.page == "game":
                                         ]
 
                                         current = board[r][c]
+
                                         default_index = (
                                             options.index(str(current))
-                                            if current
+                                            if current != 0
                                             else 0
                                         )
 
@@ -874,53 +1021,44 @@ elif st.session_state.page == "game":
                                             else 0
                                         )
 
-                                        if value != board[r][c]:
-                                            if value == 0:
-                                                board[r][c] = 0
-                                                st.session_state.board = board
-                                                st.rerun()
+                                        # Không thay đổi thì bỏ qua.
+                                        if value == board[r][c]:
+                                            continue
 
-                                            # Kiểm tra luật Sudoku và đáp án
-                                            if (
-                                                has_conflict(
-                                                    board, r, c, value
-                                                )
-                                                or value != SOLUTION[r][c]
-                                            ):
+                                        # Cho phép xóa lựa chọn.
+                                        if value == 0:
+                                            board[r][c] = 0
+                                            st.session_state.board = [
+                                                row[:] for row in board
+                                            ]
+                                            st.rerun()
+
+                                        # Sai đáp án hoặc vi phạm luật:
+                                        # kết thúc màn và phát âm thanh thua.
+                                        if (
+                                            has_conflict(board, r, c, value)
+                                            or value != SOLUTION[r][c]
+                                        ):
+                                            st.session_state.status = "lost"
+                                            st.session_state.sound_event = "lose"
+                                            st.rerun()
+
+                                        # Đáp án đúng.
+                                        board[r][c] = value
+
+                                        st.session_state.board = [
+                                            row[:] for row in board
+                                        ]
+
+                                        # Khi đủ số, kiểm tra toàn bộ bảng.
+                                        if board_complete(board):
+                                            if board_is_correct(board):
+                                                finish_level()
+                                            else:
                                                 st.session_state.status = "lost"
                                                 st.session_state.sound_event = "lose"
-                                                st.rerun()
 
-                                            board[r][c] = value
-                                            st.session_state.board = board
-                                            st.session_state.sound_event = "win"
-
-                                            if board_complete(board):
-                                                if board == SOLUTION:
-                                                    st.session_state.status = "won"
-
-                                                    if (
-                                                        level_index
-                                                        not in st.session_state.completed
-                                                    ):
-                                                        st.session_state.completed.append(
-                                                            level_index
-                                                        )
-
-                                                    st.session_state.unlocked = max(
-                                                        st.session_state.unlocked,
-                                                        min(
-                                                            level_index + 1,
-                                                            len(LEVELS) - 1,
-                                                        ),
-                                                    )
-
-                                                    st.session_state.celebrated = False
-                                                else:
-                                                    st.session_state.status = "lost"
-                                                    st.session_state.sound_event = "lose"
-
-                                            st.rerun()
+                                        st.rerun()
 
         st.write("")
 
